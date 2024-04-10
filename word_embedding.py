@@ -104,17 +104,21 @@ def compute_tf_idf(corpus):
     
     return tf_idf, vocab_index
 
-def find_nearest_neighbors(word_vector, ppmi_matrix, vocab_index, pos_tag=None, top_n=5):
-    similarities = []
+def find_nearest_neighbors(word_with_pos, co_occurrence_matrix, vocab_index, top_n=5):
+    _, target_pos = word_with_pos.rsplit('_', 1)  # Extract the POS tag from the target word
+    word_idx = vocab_index[word_with_pos]  # Get the index of the target word
+    word_vector = co_occurrence_matrix[word_idx, :]  # Get the vector for the target word
 
+    similarities = []
     for other_word, other_idx in vocab_index.items():
-        # Check for matching POS tags if pos_tag is specified
-        if pos_tag is None or other_word.endswith(f"_{pos_tag}"):
-            other_vector = ppmi_matrix[other_idx, :]
-            sim = cosine_similarity(word_vector, other_vector)
+        _, other_pos = other_word.rsplit('_', 1)  # Extract the POS tag from the other word
+        if other_pos == target_pos:  # Check if the POS tags match
+            other_vector = co_occurrence_matrix[other_idx, :]  # Get the vector for the other word
+            sim = cosine_similarity(word_vector, other_vector)  # Compute the similarity
             similarities.append((other_word, sim))
 
     nearest_neighbors = sorted(similarities, key=lambda x: x[1], reverse=True)[:top_n]
     return nearest_neighbors
+
 
 
