@@ -2,43 +2,45 @@ import numpy as np
 import math
 from collections import Counter
 
-def tokenize_with_pos(tagged_corpus):
-    # Tokenize the corpus and include POS tags
-    # Correctly unpack each (word, pos) tuple in the sentence
-    tokenized_corpus = [f"{word.lower()}_{pos}" for sentence in tagged_corpus for word, pos in sentence]
-    return tokenized_corpus
+#sample sentence: [('Pierre', 'NNP'), ('Vinken', 'NNP'), (',', ','), ('61', 'CD'), ('years', 'NNS'), ('old', 'JJ'), (',', ','), ('will', 'MD'), ('join', 'VB'), ('the', 'DT'), ('board', 'NN'), ('as', 'IN'), ('a', 'DT'), ('nonexecutive', 'JJ'), ('director', 'NN'), ('Nov.', 'NNP'), ('29', 'CD'), ('.', '.')]
+def tokenize_with_pos(tagged_sentence):
+    tokenized_sentence = []
+    for word, tag in tagged_sentence:
+        tokenized_sentence.append(f"{word.lower()}_{tag}")
+    return tokenized_sentence
 
 
 
+def word2vec_pos(tagged_corpus, window_size=4, pos_weighting=None, pos_weights=None):
+    if pos_weights is None:
+        pos_weights = {"_VB": 1.5}
 
-def word2vec_pos(tagged_corpus, window_size=4):
-    # Tokenize with POS tags
     tokenized_corpus = [tokenize_with_pos(sentence) for sentence in tagged_corpus]
-    
-    # Flatten the list of token lists to create a single list of tokens
     flat_tokenized_corpus = [token for sentence in tokenized_corpus for token in sentence]
     
-    # Now you can create a set from the flat list of tokens
     vocabulary = sorted(set(flat_tokenized_corpus))
     vocab_index = {token: i for i, token in enumerate(vocabulary)}
     
-    # Initialize the word-word co-occurrence matrix
     co_occurrence_matrix = np.zeros((len(vocabulary), len(vocabulary)))
-    
-    # Populate the matrix based on co-occurrences within the context window
+
     for tokens in tokenized_corpus:
         for idx, token in enumerate(tokens):
             token_idx = vocab_index[token]
             start = max(idx - window_size, 0)
             end = min(idx + window_size + 1, len(tokens))
-            
+
             for ctx_idx in range(start, end):
                 if ctx_idx != idx:  # Exclude the target word itself
                     context_token = tokens[ctx_idx]
                     context_token_idx = vocab_index[context_token]
-                    co_occurrence_matrix[token_idx, context_token_idx] += 1
+                    weight = 1
+                    _, pos = context_token.rsplit('_', 1)
+                    weight = pos_weights.get(f"_{pos}", 1)
+
+                    co_occurrence_matrix[token_idx, context_token_idx] += weight
                     
     return co_occurrence_matrix, vocab_index
+
 
 
 
@@ -56,6 +58,22 @@ def cosine_similarity(v, w):
         return 0
     else:
         return dot_product / (magnitude_v * magnitude_w)
+    
+def compute_ppmi(co_occurrence_matrix):
+    # Calculate the probabilities of each word and context
+    word_prob = np.sum(co_occurrence_matrix, axis=1) / np.sum(co_occurrence_matrix)
+    context_prob = np.sum(co_occurrence_matrix, axis=0) / np.sum(co_occurrence_matrix)
+    
+    # Calculate the joint probability matrix for words and contexts
+    joint_prob_matrix = co_occurrence_matrix / np.sum(co_occurrence_matrix)
+    
+    # Calculate PPMI
+    ppmi_matrix = np.maximum(np.log2(joint_prob_matrix / (word_prob[:, None] * context_prob[None, :])), 0)
+    
+    # Replace NaN and -Inf values with 0 (resulting from 0/0 or log(0) in calculations)
+    ppmi_matrix = np.nan_to_num(ppmi_matrix)
+    
+    return ppmi_matrix
 
 
 def compute_tf_idf(corpus):
@@ -86,19 +104,17 @@ def compute_tf_idf(corpus):
     
     return tf_idf, vocab_index
 
-def find_nearest_neighbors(word, co_occurrence_matrix, vocab_index, top_n=5):
-    word_idx = vocab_index.get(f"{word.lower()}_NN", None)  # Example: looking for nouns
-    if word_idx is None:
-        return []
-
+def find_nearest_neighbors(word_vector, ppmi_matrix, vocab_index, pos_tag=None, top_n=5):
     similarities = []
-    word_vector = co_occurrence_matrix[word_idx, :]
 
     for other_word, other_idx in vocab_index.items():
-        if other_word != word:
-            other_vector = co_occurrence_matrix[other_idx, :]
+        # Check for matching POS tags if pos_tag is specified
+        if pos_tag is None or other_word.endswith(f"_{pos_tag}"):
+            other_vector = ppmi_matrix[other_idx, :]
             sim = cosine_similarity(word_vector, other_vector)
             similarities.append((other_word, sim))
 
-    # Sort by similarity
-    return sorted(similarities, key=lambda x: x[1], reverse=True)[:top_n]
+    nearest_neighbors = sorted(similarities, key=lambda x: x[1], reverse=True)[:top_n]
+    return nearest_neighbors
+
+
