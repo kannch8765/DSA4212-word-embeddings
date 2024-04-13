@@ -30,7 +30,7 @@ def word2vec_pos(tagged_corpus, window_size=4, pos_weighting=None, pos_weights=N
             end = min(idx + window_size + 1, len(tokens))
 
             for ctx_idx in range(start, end):
-                if ctx_idx != idx:  # Exclude the target word itself
+                if ctx_idx != idx:  
                     context_token = tokens[ctx_idx]
                     context_token_idx = vocab_index[context_token]
                     weight = 1
@@ -45,49 +45,36 @@ def word2vec_pos(tagged_corpus, window_size=4, pos_weighting=None, pos_weights=N
 
 
 def cosine_similarity(v, w):
-    # Compute the dot product between v and w
     dot_product = np.dot(v, w)
-    
-    # Compute the magnitude (length) of v and w
     magnitude_v = np.sqrt(np.dot(v, v))
     magnitude_w = np.sqrt(np.dot(w, w))
-    
-    # Compute the cosine similarity
+
     if magnitude_v == 0 or magnitude_w == 0:
-        # Return 0 if one of the vectors is a zero vector
         return 0
     else:
         return dot_product / (magnitude_v * magnitude_w)
     
 def compute_ppmi(co_occurrence_matrix):
-    # Calculate the probabilities of each word and context
     word_prob = np.sum(co_occurrence_matrix, axis=1) / np.sum(co_occurrence_matrix)
     context_prob = np.sum(co_occurrence_matrix, axis=0) / np.sum(co_occurrence_matrix)
     
-    # Calculate the joint probability matrix for words and contexts
     joint_prob_matrix = co_occurrence_matrix / np.sum(co_occurrence_matrix)
-    
-    # Calculate PPMI
     ppmi_matrix = np.maximum(np.log2(joint_prob_matrix / (word_prob[:, None] * context_prob[None, :])), 0)
-    
-    # Replace NaN and -Inf values with 0 (resulting from 0/0 or log(0) in calculations)
+
     ppmi_matrix = np.nan_to_num(ppmi_matrix)
     
     return ppmi_matrix
 
 
 def compute_tf_idf(corpus):
-    # Tokenize the corpus and build the vocabulary
     tokenized_corpus = [doc.lower().split() for doc in corpus]
     vocabulary = sorted(set(word for doc in tokenized_corpus for word in doc))
     vocab_index = {word: i for i, word in enumerate(vocabulary)}
 
-    # Initialize matrices and document frequency dictionary
     tf = np.zeros((len(corpus), len(vocabulary)))
     df = Counter()
     idf = np.zeros(len(vocabulary))
     
-    # Compute term frequency (TF) and document frequency (DF)
     for doc_idx, doc in enumerate(tokenized_corpus):
         doc_counter = Counter(doc)
         for word, count in doc_counter.items():
@@ -95,26 +82,24 @@ def compute_tf_idf(corpus):
             tf[doc_idx, word_idx] = 1 + math.log10(count)
             df[word] += 1
     
-    # Compute inverse document frequency (IDF)
     for word, word_idx in vocab_index.items():
         idf[word_idx] = math.log10(len(corpus) / df[word])
     
-    # Compute TF-IDF
     tf_idf = tf * idf
     
     return tf_idf, vocab_index
 
 def find_nearest_neighbors(word_with_pos, co_occurrence_matrix, vocab_index, top_n=5):
-    _, target_pos = word_with_pos.rsplit('_', 1)  # Extract the POS tag from the target word
-    word_idx = vocab_index[word_with_pos]  # Get the index of the target word
-    word_vector = co_occurrence_matrix[word_idx, :]  # Get the vector for the target word
+    _, target_pos = word_with_pos.rsplit('_', 1)  
+    word_idx = vocab_index[word_with_pos]  
+    word_vector = co_occurrence_matrix[word_idx, :]  
 
     similarities = []
     for other_word, other_idx in vocab_index.items():
-        _, other_pos = other_word.rsplit('_', 1)  # Extract the POS tag from the other word
-        if other_pos == target_pos:  # Check if the POS tags match
-            other_vector = co_occurrence_matrix[other_idx, :]  # Get the vector for the other word
-            sim = cosine_similarity(word_vector, other_vector)  # Compute the similarity
+        _, other_pos = other_word.rsplit('_', 1)  
+        if other_pos == target_pos:  
+            other_vector = co_occurrence_matrix[other_idx, :]  
+            sim = cosine_similarity(word_vector, other_vector)  
             similarities.append((other_word, sim))
 
     nearest_neighbors = sorted(similarities, key=lambda x: x[1], reverse=True)[:top_n]
