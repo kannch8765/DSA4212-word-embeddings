@@ -66,29 +66,6 @@ def compute_ppmi(co_occurrence_matrix):
     return ppmi_matrix
 
 
-def compute_tf_idf(corpus):
-    tokenized_corpus = [doc.lower().split() for doc in corpus]
-    vocabulary = sorted(set(word for doc in tokenized_corpus for word in doc))
-    vocab_index = {word: i for i, word in enumerate(vocabulary)}
-
-    tf = np.zeros((len(corpus), len(vocabulary)))
-    df = Counter()
-    idf = np.zeros(len(vocabulary))
-    
-    for doc_idx, doc in enumerate(tokenized_corpus):
-        doc_counter = Counter(doc)
-        for word, count in doc_counter.items():
-            word_idx = vocab_index[word]
-            tf[doc_idx, word_idx] = 1 + math.log10(count)
-            df[word] += 1
-    
-    for word, word_idx in vocab_index.items():
-        idf[word_idx] = math.log10(len(corpus) / df[word])
-    
-    tf_idf = tf * idf
-    
-    return tf_idf, vocab_index
-
 def find_nearest_neighbors(word_with_pos, co_occurrence_matrix, vocab_index, top_n=5):
     _, target_pos = word_with_pos.rsplit('_', 1)  
     word_idx = vocab_index[word_with_pos]  
